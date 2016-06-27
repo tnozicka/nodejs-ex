@@ -1,0 +1,134 @@
+kind: "Template"
+apiVersion: "v1"
+
+parameters:
+- name: APP_NAME
+  description: "The name for the application."
+  required: true
+- name: IMAGE_STREAM_TAG
+  description: "ImageStream Tag. e.g. 'APP_NAME:latest'"
+  required: true
+- name: IMAGE_STREAM_NAMESPACE
+  description: "Namespace in which the ImageStreams are stored."
+  value: ""
+- name: SERVICE_URL
+  displayName: "Service URL"
+  description: ""
+  value: ""
+- name: DATABASE_SERVICE_NAME
+  displayName: "Database Service Name"
+  value: "mongodb"
+- name: DATABASE_USER
+  displayName: "MongoDB Username"
+  description: "Username for MongoDB user that will be used for accessing the database."
+  value: "nodejsuser"
+- name: DATABASE_PASSWORD
+  displayName: "MongoDB Password"
+  description: "Password for the MongoDB user."
+  value: "nodejs1password"
+- name: DATABASE_NAME
+  displayName: "Database Name"
+  value: "nodejsexdb"
+- name: DATABASE_ADMIN_PASSWORD
+  displayName: "Database Administrator Password"
+  description: "Password for the database admin user."
+  value: "nodejs0adminpassword"
+- name: MEMORY_LIMIT
+  displayName: "Memory Limit"
+  description: "Maximum amount of memory the Node.js container can use."
+  value: "512Mi"
+
+objects:
+- kind: Service
+  apiVersion: v1
+  metadata:
+    name: "${APP_NAME}"
+    labels:
+      app: "${APP_NAME}"
+    annotations:
+      description: "Exposes and load balances the application pods"
+      service.alpha.openshift.io/dependencies: '[{"name": "mongodb", "namespace": "", "kind": "Service"}]'
+  spec:
+    ports:
+    - name: "web"
+      port: 8080
+      targetPort: 8080
+    selector:
+      deploymentConfig: "${APP_NAME}"
+- kind: Route
+  apiVersion: v1
+  metadata:
+    name: "${APP_NAME}"
+    labels:
+      app: "${APP_NAME}"
+  spec:
+    host: "${SERVICE_URL}"
+    path: /
+    to:
+      kind: "Service"
+      name: "${APP_NAME}"
+- kind: DeploymentConfig
+  apiVersion: v1
+  metadata:
+    name: "${APP_NAME}"
+    labels:
+      app: "${APP_NAME}"
+  spec:
+    strategy:
+      type: Rolling
+    triggers:
+    - type: ConfigChange
+    - type: ImageChange
+      imageChangeParams:
+        automatic: false 
+        containerNames:
+        - "${APP_NAME}"
+        from:
+          kind: ImageStreamTag
+          name: "${IMAGE_STREAM_TAG}"
+          namespace: "${IMAGE_STREAM_NAMESPACE}"
+        lastTriggeredImage: ""
+    replicas: 1
+    selector:
+      deploymentConfig: "${APP_NAME}"
+    template:
+      metadata:
+        name: "${APP_NAME}"
+        labels:
+          app: "${APP_NAME}"
+          deploymentConfig: "${APP_NAME}"
+      spec:
+        containers:
+        - name: "${APP_NAME}"
+          image: " "
+          imagePullPolicy: "Always"
+          ports:
+          - containerPort: 8080
+          env:
+          - name: DATABASE_SERVICE_NAME
+            value: "${DATABASE_SERVICE_NAME}"
+          - name: MONGODB_USER
+            value: "${DATABASE_USER}"
+          - name: MONGODB_PASSWORD
+            value: "${DATABASE_PASSWORD}"
+          - name: MONGODB_DATABASE
+            value: "${DATABASE_NAME}"
+          - name: MONGODB_ADMIN_PASSWORD
+            value: "${DATABASE_ADMIN_PASSWORD}"
+          readinessProbe:
+            timeoutSeconds: 3
+            initialDelaySeconds: 8
+            httpGet:
+              path: "/pagecount"
+              port: 8080
+          livenessProbe:
+            exec:
+              command:
+              - "/bin/bash"
+              - "-c"
+              - 'if [ "$(curl -sL http://localhost:8080/pageCount)" == "{ pageCount: -1 }" ]; then exit -1; else exit 0; fi'
+            timeoutSeconds: 3
+            initialDelaySeconds: 15 
+          resources:
+            limits:
+              memory: "${MEMORY_LIMIT}"
