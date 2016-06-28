@@ -55,15 +55,6 @@ objects:
     strategy:
       type: "Recreate"
     triggers:
-    - type: "ImageChange"
-      imageChangeParams:
-        automatic: true
-        containerNames:
-          - "mongodb"
-        from:
-          kind: "ImageStreamTag"
-          namespace: "openshift"
-          name: "mongodb:2.6"
     - type: "ConfigChange"
     replicas: 1
     selector:
@@ -76,7 +67,7 @@ objects:
       spec:
         containers:
         - name: "mongodb"
-          image: " "
+          image: "registry.access.redhat.com/rhscl/mongodb-26-rhel7"
           ports:
           - containerPort: 27017
           env:
