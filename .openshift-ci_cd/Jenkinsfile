@@ -1,12 +1,18 @@
 #!/usr/bin/groovy
 
+def k8s_token = '<unknown>'
+
+node ('master') {
+    k8s_token = readFile '/var/run/secrets/kubernetes.io/serviceaccount/token'
+}
+
 node ('redhatdistortion-nodejs') {
     def k8s_namespace = readFile '/var/run/secrets/kubernetes.io/serviceaccount/namespace'
 
     stage 'Checkout'
     checkout scm
 
-    sh 'oc login https://kubernetes.default/ --token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) --certificate-authority=/run/secrets/kubernetes.io/serviceaccount/ca.crt'
+    sh 'oc login https://kubernetes.default/ --token=${k8s_token} --certificate-authority=/run/secrets/kubernetes.io/serviceaccount/ca.crt'
     // Prepare the deployments so you can see pipeline in console overview when running for the first time
     // Deleting route first is a bugfix for https://github.com/openshift/origin/pull/9425 not getting into latest OpenShift release
     sh 'template=$(oc process -f .openshift-ci_cd/empty-deployment-template.yaml -v "APP_NAME=nodejs-ex-dev") && (echo ${template} | oc get -f - 1>/dev/null 2>&1) || ((oc delete route nodejs-ex-dev 1>/dev/null 2>&1 || true) && echo ${template} | oc apply -f -)'
