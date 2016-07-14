@@ -33,7 +33,7 @@ node ('redhatdistortion-nodejs') {
     stage 'Run Integration Tests'
     sh 'npm config set prefix=$HOME/node && export PATH=$HOME/node/bin:$PATH && npm install -r package.json'
     //sh 'ROUTE=`oc get routes | grep nodejs-ex-dev | awk \'{print $2}\'` && IP=$ROUTE node_modules/mocha/bin/mocha --timeout 5000 tests/app_test.js --reporter xunit | tee report.xml'
-    sh 'IP=nodejs-ex-dev.${k8s_namespace}.svc.cluster.local node_modules/mocha/bin/mocha --timeout 5000 tests/app_test.js --reporter xunit | tee report.xml'
+    sh "IP=nodejs-ex-dev.${k8s_namespace}.svc.cluster.local node_modules/mocha/bin/mocha --timeout 5000 tests/app_test.js --reporter xunit | tee report.xml"
     // The first three lines in report.xml is not valid xml hence removing it to make it valid
     sh 'sed -i -e 1,3d report.xml'
     archive 'report.xml'
