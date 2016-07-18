@@ -1,26 +1,36 @@
 #!/usr/bin/groovy
 
+def k8s_token = '<unknown>'
+
 node ('master') {
+    k8s_token = readFile '/var/run/secrets/kubernetes.io/serviceaccount/token'
+}
+
+node ('nodejs') {
     def k8s_namespace = readFile '/var/run/secrets/kubernetes.io/serviceaccount/namespace'
 
     stage 'Checkout'
     checkout scm
 
-    sh 'oc login https://kubernetes.default/ --token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) --certificate-authority=/run/secrets/kubernetes.io/serviceaccount/ca.crt'
+    sh "oc login https://kubernetes.default/ --token=${k8s_token} --certificate-authority=/run/secrets/kubernetes.io/serviceaccount/ca.crt"
     // Prepare the deployments so you can see pipeline in console overview when running for the first time
-    // Deleting route first is a bugfix for https://github.com/openshift/origin/pull/9425 not getting into latest OpenShift release
-    sh 'template=$(oc process -f .openshift-ci_cd/empty-deployment-template.yaml -v "APP_NAME=nodejs-ex-dev") && (echo ${template} | oc get -f - 1>/dev/null 2>&1) || ((oc delete route nodejs-ex-dev 1>/dev/null 2>&1 || true) && echo ${template} | oc apply -f -)'
+    sh 'oc process -f .openshift-ci_cd/empty-deployment-template.yaml -v "APP_NAME=nodejs-ex-dev" | oc apply -f -'
 
     stage 'Deploy MongoDB'
     sh 'oc process -f .openshift-ci_cd/mongodb-deployment-template.yaml | oc apply -f -'
-    
+
     stage 'Create Image'
-    sh 'oc delete bc nodejs-ex || true'  // Bugfix for https://github.com/openshift/origin/issues/9301
     sh 'oc process -f https://github.com/tnozicka/openshift-templates/raw/master/binary-build-template.yaml -v "APP_NAME=nodejs-ex,BUILDER_IMAGE=registry.access.redhat.com/openshift3/nodejs-010-rhel7,OUTPUT_IMAGESTREAM_TAG=nodejs-ex:latest" | oc apply -f -'
     sh 'oc start-build nodejs-ex --from-repo=. --follow'
 
     stage 'Deploy to dev'
-    sh 'oc delete route nodejs-ex-dev || true'  // Bugfix for https://github.com/openshift/origin/pull/9425 not getting into latest OpenShift release
     sh "oc process -f .openshift-ci_cd/deployment-template.yaml -v 'APP_NAME=nodejs-ex-dev,IMAGE_STREAM_NAMESPACE=${k8s_namespace},IMAGE_STREAM_TAG=nodejs-ex:latest' | oc apply -f -"
     sh 'oc annotate is nodejs-ex misc_$(date +%s)=foo || true'  // Hack for 0-2 minute pause caused by https://github.com/openshift/origin/issues/9018
+
+    stage 'Run Integration Tests'
+    sh 'npm install mocha-multi && npm install -r package.json'
+    sh 'while [[ "$(curl -s --max-time 3 -L http://nodejs-ex-dev:8080/pageCount || echo \'{ pageCount: -1 }\')" == "{ pageCount: -1 }" ]]; do echo "Waiting for service to come up..."; sleep 1; done && echo "Service is up."'
+    sh 'HTTP_TEST_SERVER="http://nodejs-ex-dev:8080" multi="xunit=report.xml spec=-" ./node_modules/mocha/bin/mocha --timeout 5000 ./tests/app_test.js --reporter mocha-multi'
+    archive 'report.xml'
+    step([$class: 'JUnitResultArchiver', testResults: 'report.xml'])
 }
