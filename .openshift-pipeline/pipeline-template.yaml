@@ -34,7 +34,7 @@ objects:
     strategy:
       type: JenkinsPipeline
       jenkinsPipelineStrategy:
-        jenkinsfilePath: .openshift-ci_cd/Jenkinsfile
+        jenkinsfilePath: .openshift-pipeline/Jenkinsfile
     source:
       type: git
       git:
