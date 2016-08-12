@@ -24,7 +24,7 @@ objects:
     labels:
       app: nodejs-ex
     annotations:
-      pipeline.alpha.openshift.io/uses: '[{"name": "nodejs-ex-dev", "namespace": "", "kind": "DeploymentConfig"},{"name": "nodejs-ex-test", "namespace": "", "kind": "DeploymentConfig"},{"name": "nodejs-ex-prod", "namespace": "", "kind": "DeploymentConfig"}]'
+      pipeline.alpha.openshift.io/uses: '[{"name": "nodejs-ex", "namespace": "", "kind": "DeploymentConfig"}]'
   spec:
     triggers:
 #    - type: ConfigChange

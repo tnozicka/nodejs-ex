@@ -14,7 +14,7 @@ node ('nodejs') {
 
     sh "oc login https://kubernetes.default/ --token=${k8s_token} --certificate-authority=/run/secrets/kubernetes.io/serviceaccount/ca.crt"
     // Prepare the deployments so you can see pipeline in console overview when running for the first time
-    sh 'oc process -f .openshift-pipeline/empty-deployment-template.yaml -v "APP_NAME=nodejs-ex-dev" | oc apply -f -'
+    sh 'oc process -f .openshift-pipeline/empty-deployment-template.yaml -v "APP_NAME=nodejs-ex" | oc apply -f -'
 
     stage 'Deploy MongoDB'
     sh 'oc process -f .openshift-pipeline/mongodb-deployment-template.yaml | oc apply -f -'
@@ -23,14 +23,14 @@ node ('nodejs') {
     sh 'oc process -f https://github.com/tnozicka/openshift-templates/raw/master/binary-build-template.yaml -v "APP_NAME=nodejs-ex,BUILDER_IMAGE=registry.access.redhat.com/openshift3/nodejs-010-rhel7,OUTPUT_IMAGESTREAM_TAG=nodejs-ex:latest" | oc apply -f -'
     sh 'oc start-build nodejs-ex --from-repo=. --follow'
 
-    stage 'Deploy to dev'
-    sh "oc process -f .openshift-pipeline/deployment-template.yaml -v 'APP_NAME=nodejs-ex-dev,IMAGE_STREAM_NAMESPACE=${k8s_namespace},IMAGE_STREAM_TAG=nodejs-ex:latest' | oc apply -f -"
+    stage 'Deploy'
+    sh "oc process -f .openshift-pipeline/deployment-template.yaml -v 'APP_NAME=nodejs-ex,IMAGE_STREAM_NAMESPACE=${k8s_namespace},IMAGE_STREAM_TAG=nodejs-ex:latest' | oc apply -f -"
     sh 'oc annotate is nodejs-ex misc_$(date +%s)=foo || true'  // Hack for 0-2 minute pause caused by https://github.com/openshift/origin/issues/9018
 
     stage 'Run Integration Tests'
     sh 'npm install mocha-multi && npm install -r package.json'
-    sh 'while [[ "$(curl -s --max-time 3 -L http://nodejs-ex-dev:8080/pageCount || echo \'{ pageCount: -1 }\')" == "{ pageCount: -1 }" ]]; do echo "Waiting for service to come up..."; sleep 1; done && echo "Service is up."'
-    sh 'HTTP_TEST_SERVER="http://nodejs-ex-dev:8080" multi="xunit=report.xml spec=-" ./node_modules/mocha/bin/mocha --timeout 5000 ./tests/app_test.js --reporter mocha-multi'
+    sh 'while [[ "$(curl -s --max-time 3 -L http://nodejs-ex:8080/pageCount || echo \'{ pageCount: -1 }\')" == "{ pageCount: -1 }" ]]; do echo "Waiting for service to come up..."; sleep 1; done && echo "Service is up."'
+    sh 'HTTP_TEST_SERVER="http://nodejs-ex:8080" multi="xunit=report.xml spec=-" ./node_modules/mocha/bin/mocha --timeout 5000 ./tests/app_test.js --reporter mocha-multi'
     archive 'report.xml'
     step([$class: 'JUnitResultArchiver', testResults: 'report.xml'])
 }
