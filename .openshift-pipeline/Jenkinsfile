@@ -1,18 +1,11 @@
 #!/usr/bin/groovy
-
-def k8s_token = '<unknown>'
-
-node ('master') {
-    k8s_token = readFile '/var/run/secrets/kubernetes.io/serviceaccount/token'
-}
-
 node ('nodejs') {
     def k8s_namespace = readFile '/var/run/secrets/kubernetes.io/serviceaccount/namespace'
 
     stage 'Checkout'
     checkout scm
 
-    sh "oc login https://kubernetes.default/ --token=${k8s_token} --certificate-authority=/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+    sh 'oc login https://kubernetes.default/ --token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) --certificate-authority=/run/secrets/kubernetes.io/serviceaccount/ca.crt'
     // Prepare the deployments so you can see pipeline in console overview when running for the first time
     sh 'oc process -f .openshift-pipeline/empty-deployment-template.yaml -v "APP_NAME=nodejs-ex" | oc apply -f -'
 
