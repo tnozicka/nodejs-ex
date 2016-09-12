@@ -18,7 +18,6 @@ node ('nodejs') {
 
     stage 'Deploy'
     sh "oc process -f .openshift-pipeline/deployment-template.yaml -v 'APP_NAME=nodejs-ex,IMAGE_STREAM_NAMESPACE=${k8s_namespace},IMAGE_STREAM_TAG=nodejs-ex:latest' | oc apply -f -"
-    sh 'oc annotate is nodejs-ex misc_$(date +%s)=foo || true'  // Hack for 0-2 minute pause caused by https://github.com/openshift/origin/issues/9018
 
     stage 'Run Integration Tests'
     sh 'npm install mocha-multi && npm install -r package.json'
