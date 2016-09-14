@@ -14,7 +14,7 @@ node ('nodejs') {
 
     stage 'Create Image'
     sh 'oc process -f https://github.com/tnozicka/openshift-templates/raw/master/binary-build-template.yaml -v "APP_NAME=nodejs-ex,BUILDER_IMAGE=registry.access.redhat.com/openshift3/nodejs-010-rhel7,OUTPUT_IMAGESTREAM_TAG=nodejs-ex:latest" | oc apply -f -'
-    sh 'oc start-build nodejs-ex --from-repo=. --follow'
+    sh 'oc start-build nodejs-ex --from-repo=. --follow --wait'
 
     stage 'Deploy'
     sh "oc process -f .openshift-pipeline/deployment-template.yaml -v 'APP_NAME=nodejs-ex,IMAGE_STREAM_NAMESPACE=${k8s_namespace},IMAGE_STREAM_TAG=nodejs-ex:latest' | oc apply -f -"
