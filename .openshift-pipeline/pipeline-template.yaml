@@ -22,7 +22,7 @@ objects:
   metadata:
     name: nodejs-ex-pipeline
     labels:
-      app: nodejs-ex
+      app: nodejs-ex-pipeline
     annotations:
       pipeline.alpha.openshift.io/uses: '[{"name": "nodejs-ex", "namespace": "", "kind": "DeploymentConfig"}]'
   spec:
@@ -35,6 +35,7 @@ objects:
       type: JenkinsPipeline
       jenkinsPipelineStrategy:
         jenkinsfilePath: .openshift-pipeline/Jenkinsfile
+    runPolicy: Serial
     source:
       type: git
       git:

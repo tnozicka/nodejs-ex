@@ -1,27 +1,55 @@
 #!/usr/bin/groovy
 node ('nodejs') {
-    def k8s_namespace = readFile '/var/run/secrets/kubernetes.io/serviceaccount/namespace'
-
     stage 'Checkout'
     checkout scm
 
+    sh 'set -o pipefail && curl -L https://github.com/tnozicka/origin/releases/download/latest/oc.tar.xz | tar -xJ -f -'  // we need to get newest 'oc' tool until the features are in stable release
     sh 'oc login https://kubernetes.default/ --token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) --certificate-authority=/run/secrets/kubernetes.io/serviceaccount/ca.crt'
+
     // Prepare the deployments so you can see pipeline in console overview when running for the first time
-    sh 'oc process -f .openshift-pipeline/empty-deployment-template.yaml -v "APP_NAME=nodejs-ex" | oc apply -f -'
+    sh 'oc process -f .openshift-pipeline/deployment-template.yaml -v "APP_NAME=nodejs-ex" | oc apply -f -'
+    // Prepare BC and IS
+    sh 'oc process -f .openshift-pipeline/build-template.yaml -v "APP_NAME=nodejs-ex" | oc apply -f -'
+
 
     stage 'Deploy MongoDB'
     sh 'oc process -f .openshift-pipeline/mongodb-deployment-template.yaml | oc apply -f -'
 
+
     stage 'Create Image'
-    sh 'oc process -f https://github.com/tnozicka/openshift-templates/raw/master/binary-build-template.yaml -v "APP_NAME=nodejs-ex,BUILDER_IMAGE=registry.access.redhat.com/openshift3/nodejs-010-rhel7,OUTPUT_IMAGESTREAM_TAG=nodejs-ex:latest" | oc apply -f -'
     sh 'oc start-build nodejs-ex --from-repo=. --follow --wait'
+    // "oc start-build" should provide us with image_ref, but let's hack it for now
+    sh 'oc get is nodejs-ex -o go-template --template=\'{{range .status.tags}}{{if eq .tag "latest"}}{{(index .items 0).dockerImageReference}}{{end}}{{end}}\' > /tmp/pipeline-image_ref'
+    def image_ref = readFile '/tmp/pipeline-image_ref'
+
 
     stage 'Deploy'
-    sh "oc process -f .openshift-pipeline/deployment-template.yaml -v 'APP_NAME=nodejs-ex,IMAGE_STREAM_NAMESPACE=${k8s_namespace},IMAGE_STREAM_TAG=nodejs-ex:latest' | oc apply -f -"
+    // Simulate "oc rollout latest" until it gets merged to Origin
+    sh "./oc set image dc/nodejs-ex nodejs-ex=${image_ref}"
+    sh './oc deploy nodejs-ex --latest --follow'
+    sh '''
+        function status {
+            local version="$(oc get dc nodejs-ex -o template --template='{{.status.latestVersion}}' || true)"
+            if ! [[ "${version}" =~ ^[0-9]+$ ]]; then
+                echo "Unknown" && return;
+            fi
 
-    stage 'Run Integration Tests'
+            local phase="$(oc get rc nodejs-ex-${version} -o template --template='{{index .metadata.annotations "openshift.io/deployment.phase"}}')"
+
+            echo ${phase}
+        }
+
+        while [[ "$(status)" == "Running" ]]; do echo "Waiting for deployment to finish" && sleep 1; done
+        if [[ "$(status)" != "Complete" ]]; then
+            exit 1;
+        fi
+    '''//.stripMargin()
+    // oc rollout is not merged yet; the hack above won't be needed after that
+    // sh './oc rollout status nodejs-ex'  // to ensure proper return code; will not be nessecary with 'oc rollout latest --follow --wait' if --wait makes it to master
+
+
+    stage 'Integration Tests'
     sh 'npm install mocha-multi && npm install -r package.json'
-    sh 'while [[ "$(curl -s --max-time 3 -L http://nodejs-ex:8080/pageCount || echo \'{ pageCount: -1 }\')" == "{ pageCount: -1 }" ]]; do echo "Waiting for service to come up..."; sleep 1; done && echo "Service is up."'
     sh 'HTTP_TEST_SERVER="http://nodejs-ex:8080" multi="xunit=report.xml spec=-" ./node_modules/mocha/bin/mocha --timeout 5000 ./tests/app_test.js --reporter mocha-multi'
     archive 'report.xml'
     step([$class: 'JUnitResultArchiver', testResults: 'report.xml'])

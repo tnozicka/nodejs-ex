@@ -1,15 +1,8 @@
 kind: "Template"
 apiVersion: "v1"
-metadata:
-  name: "mongodb-deployment"
-  creationTimestamp: null
-  annotations:
-    description: "Deployment template for mongodb service."
-    version: "1.0.0"
-
 parameters:
-- name: "DATABASE_SERVICE_NAME"
-  displayName: "Database Service Name"
+- name: "APP_NAME"
+  displayName: "Application Name"
   value: "mongodb"
 - name: "DATABASE_USER"
   displayName: "MongoDB Username"
@@ -35,22 +28,23 @@ objects:
 - kind: "Service"
   apiVersion: "v1"
   metadata:
-    name: "${DATABASE_SERVICE_NAME}"
-    annotations:
-      description: "Exposes the database server"
+    name: "${APP_NAME}"
+    labels:
+      app: "${APP_NAME}"
   spec:
     ports:
     - name: "mongodb"
       port: 27017
       targetPort: 27017
     selector:
-      name: "${DATABASE_SERVICE_NAME}"
+      name: "${APP_NAME}"
+
 - kind: "DeploymentConfig"
   apiVersion: "v1"
   metadata:
-    name: "${DATABASE_SERVICE_NAME}"
-    annotations:
-      description: "Defines how to deploy the database"
+    name: "${APP_NAME}"
+    labels:
+      app: "${APP_NAME}"
   spec:
     strategy:
       type: "Recreate"
@@ -58,12 +52,13 @@ objects:
     - type: "ConfigChange"
     replicas: 1
     selector:
-      name: "${DATABASE_SERVICE_NAME}"
+      name: "${APP_NAME}"
     template:
       metadata:
-        name: "${DATABASE_SERVICE_NAME}"
+        name: "${APP_NAME}"
         labels:
-          name: "${DATABASE_SERVICE_NAME}"
+          app: "${APP_NAME}"
+          name: "${APP_NAME}"
       spec:
         containers:
         - name: "mongodb"
@@ -97,9 +92,9 @@ objects:
             limits:
               memory: "${MEMORY_MONGODB_LIMIT}"
           volumeMounts:
-            - name: "${DATABASE_SERVICE_NAME}-data"
+            - name: "${APP_NAME}-data"
               mountPath: "/var/lib/mongodb/data"
         volumes:
-          - name: "${DATABASE_SERVICE_NAME}-data"
+          - name: "${APP_NAME}-data"
             emptyDir:
               medium: ""
